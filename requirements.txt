@@ -1,0 +1,4 @@
+loguru
+pyfiglet
+websockets==12.0
+websockets_proxy
