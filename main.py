@@ -57,7 +57,7 @@ async def connect_to_wss(protocol_proxy, user_id):
             ssl_context.verify_mode = ssl.CERT_NONE
             urilist = ["wss://proxy2.wynd.network:4444/", "wss://proxy2.wynd.network:4650/"]
             uri = random.choice(urilist)
-            server_hostname = "proxy.wynd.network"
+            server_hostname = "proxy2.wynd.network"
             proxy = Proxy.from_url(protocol_proxy)
 
             async with proxy_connect(
