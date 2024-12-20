@@ -32,7 +32,7 @@ This bot connects via multiple HTTP proxies to farm Grass Airdrop Season 2 using
 
 ## Proxy  
 - Fill in `proxy.txt` with the format `protocol://user:pass@host:port`.  
-- Adjust the number of proxies to use on the following line `30 "ONETIME_PROXY = 100"`
+- Adjust the number of proxies to use on the following line `36 "ONETIME_PROXY = 100"`
 
 ## Need Proxy?
 1. Sign up at [Proxies.fo](https://app.proxies.fo/ref/849ec384-ecb5-1151-b4a7-c99276bff848).
