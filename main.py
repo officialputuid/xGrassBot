@@ -1,15 +1,19 @@
 # Copyright (C) 2024 officialputuid
 
+import aiohttp
 import asyncio
+import base64
 import datetime
 import json
 import random
 import ssl
 import time
 import uuid
+import websockets
+
 from loguru import logger
-from websockets_proxy import Proxy, proxy_connect
 import pyfiglet
+from websockets_proxy import Proxy, proxy_connect
 
 logger.remove()
 logger.add(
@@ -34,6 +38,33 @@ print_header()
 
 # Number of proxies to use /uid
 ONETIME_PROXY = 100
+USERAGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.2365.57",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.2365.52",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.2365.46",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.2277.128",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.2277.112",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.2277.98",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.2277.83",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.2210.133",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.2210.121",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.2210.91"
+]
+
+HTTP_STATUS_CODES = {
+    200: "OK",
+    201: "Created",
+    202: "Accepted",
+    204: "No Content",
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "Not Found",
+    500: "Internal Server Error",
+    502: "Bad Gateway",
+    503: "Service Unavailable",
+    504: "Gateway Timeout"
+}
 
 # Read UID and Proxy count
 def read_uid_and_proxy():
@@ -74,7 +105,7 @@ print(f"🔵 You selected: {'Yes' if remove_on_all_errors else 'No'}, ENJOY!\n")
 def get_node_type():
     node_type = ""
     while node_type not in ['desktop', 'extension', 'grasslite']:
-        print(f"🧩 Desktop Node (2.0x Reward), Extension (1.25x Reward), GrassLite (1.0x Reward)Extension/GrassLite")
+        print(f"🧩 Desktop Node (2.0x Reward), Extension (1.25x Reward), GrassLite (1.0x Reward)")
         node_type = input("🔵 Choose node type (desktop/extension/grasslite): ").strip().lower()
         if node_type not in ['desktop', 'extension', 'grasslite']:
             print("🔴 Invalid input. Please enter 'desktop' / 'extension' / 'grasslite'.")
@@ -89,16 +120,29 @@ def truncate_userid(user_id):
 def truncate_proxy(proxy):
     return f"{proxy[:4]}--{proxy[-4:]}"
 
+def truncate_proxy(device_id):
+    return f"{device_id[:2]}--{device_id[-2:]}"
+
 async def connect_to_wss(protocol_proxy, user_id):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, protocol_proxy))
-    # logger.info(f"UID: {truncate_userid(user_id)} | Device ID: {device_id} | Proxy: {truncate_proxy(protocol_proxy)}")
+    random_user_agent = random.choice(USERAGENTS)
+    logger.info(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Generate Device ID: {truncate_proxy(device_id)} | Proxy: {truncate_proxy(protocol_proxy)}")
+
+    has_received_action = False
+    is_authenticated = False
 
     while True:
         try:
-            await asyncio.sleep(random.uniform(0.1, 1.0)) # reduced frequency
+            await asyncio.sleep(random.randint(1, 10) / 10)
             custom_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+                "User-Agent": random_user_agent
             }
+
+            if node_type == "extension":
+                custom_headers["Origin"] = "chrome-extension://lkbnfiajjmbhnfledhphioinpickokdi"
+            elif node_type == "grasslite":
+                custom_headers["Origin"] = "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg"
+
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
@@ -111,289 +155,118 @@ async def connect_to_wss(protocol_proxy, user_id):
             server_hostname = uri.split("://")[1].split(":")[0]
             proxy = Proxy.from_url(protocol_proxy)
 
-            if node_type == 'desktop':
-                async with proxy_connect(
-                    uri,
-                    proxy=proxy,
-                    ssl=ssl_context,
-                    server_hostname=server_hostname,
-                    extra_headers={"User-Agent": custom_headers["User-Agent"]}
-                ) as websocket:
-                    logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success connect to WS with Proxy: {truncate_proxy(protocol_proxy)}")
+            async with proxy_connect(
+                uri,
+                proxy=proxy,
+                ssl=ssl_context,
+                server_hostname=server_hostname,
+                extra_headers=custom_headers
+            ) as websocket:
+                logger.success(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Success connect to WS | Headers used: {custom_headers} | Proxy: {truncate_proxy(protocol_proxy)}")
 
-                    async def send_ping():
-                        while True:
+                async def send_ping():
+                    while True:
+                        if has_received_action:
                             send_message = json.dumps({
                                 "id": str(uuid.uuid4()),
                                 "version": "1.0.0",
                                 "action": "PING",
                                 "data": {}
                             })
-                            logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send PING message ID: {json.loads(send_message)['id']}")
+                            logger.debug(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Send PING message | data: {send_message}")
                             await websocket.send(send_message)
-                            rand_sleep = random.uniform(10, 30) # random delay + reduce bandwidth usage
-                            logger.info(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent PING | Next in {rand_sleep:.2f} seconds")
-                            await asyncio.sleep(rand_sleep)
+                            logger.info(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Done sent PING | data: {send_message}")
 
-                    await asyncio.sleep(1)
-                    send_ping_task = asyncio.create_task(send_ping())
+                        rand_sleep = random.uniform(5, 10)
+                        await asyncio.sleep(rand_sleep)
 
-                    try:
-                        while True:
-                            response = await websocket.recv()
-                            message = json.loads(response)
-                            simply_message = {
-                                'id': message.get('id'),
-                                'action': message.get('action')
+                await asyncio.sleep(1)
+                send_ping_task = asyncio.create_task(send_ping())
+
+                try:
+                    while True:
+                        if is_authenticated and not has_received_action:
+                            logger.info(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Authenticated | Wait for PING Gate to Open for {'HTTP_REQUEST' if node_type in ['extension', 'grasslite'] else 'OPEN_TUNNEL'}")
+
+                        response = await websocket.recv()
+                        message = json.loads(response)
+                        logger.info(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Received message | data: {message}")
+
+                        if message.get("action") == "AUTH":
+                            extension_ids = {
+                                "extension": "lkbnfiajjmbhnfledhphioinpickokdi",
+                                "grasslite": "ilehaonighjijnmpnagapkhpcdbhclfg"
                             }
-                            logger.info(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Received message: {simply_message}")
 
-                            custom_date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
-
-                            if message.get("action") == "AUTH":
-                                auth_response = {
-                                    "id": message["id"],
-                                    "origin_action": "AUTH",
-                                    "result": {
-                                        "browser_id": device_id,
-                                        "user_id": user_id,
-                                        "user_agent": custom_headers['User-Agent'],
-                                        "timestamp": int(time.time()),
-                                        "device_type": "desktop",
-                                        "version": "4.30.0"
-                                    }
+                            auth_response = {
+                                "id": message["id"],
+                                "origin_action": "AUTH",
+                                "result": {
+                                    "browser_id": device_id,
+                                    "user_id": user_id,
+                                    "user_agent": random_user_agent,
+                                    "timestamp": int(time.time()),
+                                    "device_type": "extension" if node_type == "extension" else "desktop",
+                                    "version": "4.26.2" if node_type == "extension" else "4.30.0"
                                 }
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send AUTH | ID: {auth_response['id']} | version: {auth_response['result']['version']}")
-                                await websocket.send(json.dumps(auth_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success AUTH with Device ID: {device_id}")
-                            elif message.get("action") == "PONG":
-                                pong_response = {"id": message["id"], "origin_action": "PONG"}
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send PONG: {pong_response}")
-                                await websocket.send(json.dumps(pong_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent PONG | ID: {pong_response['id']} | Action: {pong_response['origin_action']}")
-                            elif message.get("action") == "HTTP_REQUEST":
-                                http_request_response = {"id": message["id"], "origin_action": "HTTP_REQUEST"}
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send HTTP_REQUEST: {http_request_response}")
-                                await websocket.send(json.dumps(http_request_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent HTTP_REQUEST | ID: {http_request_response['id']} | Action: {http_request_response['origin_action']}")
-                            elif message.get("action") == "OPEN_TUNNEL":
-                                opentunnel_request_response = {
-                                    "id": message["id"],
-                                    "origin_action": "OPEN_TUNNEL",
-                                    "result": {
-                                        "url": message["url"],
-                                        "status": 200,
-                                        "status_text": "OK",
-                                        "headers": {
-                                            "content-type": "application/json; charset=utf-8",
-                                            "date": custom_date,
-                                            "keep-alive": "timeout=5",
-                                            "proxy-connection": "keep-alive",
-                                            "x-powered-by": "Express",
+                            }
+
+                            if node_type in extension_ids:
+                                auth_response["result"]["extension_id"] = extension_ids[node_type]
+
+                            logger.debug(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Send AUTH | data: {auth_response}")
+                            await websocket.send(json.dumps(auth_response))
+                            logger.success(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Done sent AUTH | data: {auth_response}")
+                            is_authenticated = True
+
+                        elif message.get("action") in ["HTTP_REQUEST", "OPEN_TUNNEL"]:
+                            has_received_action = True
+                            request_data = message["data"]
+
+                            headers = {
+                                "User-Agent": custom_headers["User-Agent"],
+                                "Content-Type": "application/json; charset=utf-8"
+                            }
+
+                            async with aiohttp.ClientSession() as session:
+                                async with session.get(request_data["url"], headers=headers) as api_response:
+                                    content = await api_response.text()
+                                    encoded_body = base64.b64encode(content.encode()).decode()
+
+                                    status_text = HTTP_STATUS_CODES.get(api_response.status, "")
+
+                                    http_response = {
+                                        "id": message["id"],
+                                        "origin_action": message["action"],
+                                        "result": {
+                                            "url": request_data["url"],
+                                            "status": api_response.status,
+                                            "status_text": status_text,
+                                            "headers": dict(api_response.headers),
+                                            "body": encoded_body
                                         }
                                     }
-                                }
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send OPEN_TUNNEL: {opentunnel_request_response}")
-                                await websocket.send(json.dumps(opentunnel_request_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent OPEN_TUNNEL | ID: {opentunnel_request_response['id']} | Action: {opentunnel_request_response['origin_action']}")
-                    except websockets.exceptions.ConnectionClosedError as e:
-                        logger.error(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Connection closed error | Proxy: {truncate_proxy(protocol_proxy)} | Error: {str(e)[:30]}**")
-                    finally:
-                        await websocket.close()
-                        logger.warning(f"UID: {truncate_userid(user_id)} | Node: {node_type} | WebSocket connection closed | Proxy: {truncate_proxy(protocol_proxy)}")
-                        send_ping_task.cancel()
-                        break
 
-            elif node_type == 'extension':
-                async with proxy_connect(
-                    uri,
-                    proxy=proxy,
-                    ssl=ssl_context,
-                    server_hostname=server_hostname,
-                    extra_headers={"Origin": "chrome-extension://lkbnfiajjmbhnfledhphioinpickokdi", "User-Agent": custom_headers["User-Agent"]}
-                ) as websocket:
-                    logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success connected to WS with Proxy: {truncate_proxy(protocol_proxy)}")
+                                    logger.info(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Open PING Access | data: {http_response}")
+                                    await websocket.send(json.dumps(http_response))
+                                    logger.success(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Done sent PING Access | data: {http_response}")
 
-                    async def send_ping():
-                        while True:
-                            send_message = json.dumps({
-                                "id": str(uuid.uuid4()),
-                                "version": "1.0.0",
-                                "action": "PING",
-                                "data": {}
-                            })
-                            logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send PING | ID: {json.loads(send_message)['id']}")
-                            await websocket.send(send_message)
-                            rand_sleep = random.uniform(10, 30) # random delay + reduce bandwidth usage
-                            logger.info(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent PING | Next in {rand_sleep:.2f} seconds")
-                            await asyncio.sleep(rand_sleep)
+                        elif message.get("action") == "PONG":
+                            pong_response = {"id": message["id"], "origin_action": "PONG"}
+                            logger.debug(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Send PONG | data: {pong_response}")
+                            await websocket.send(json.dumps(pong_response))
+                            logger.success(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Done sent PONG | data: {pong_response}")
 
-                    await asyncio.sleep(1)
-                    send_ping_task = asyncio.create_task(send_ping())
-
-                    try:
-                        while True:
-                            response = await websocket.recv()
-                            message = json.loads(response)
-                            simply_message = {
-                                'id': message.get('id'),
-                                'action': message.get('action')
-                            }
-                            logger.info(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Received message: {simply_message}")
-
-                            custom_date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
-
-                            if message.get("action") == "AUTH":
-                                auth_response = {
-                                    "id": message["id"],
-                                    "origin_action": "AUTH",
-                                    "result": {
-                                        "browser_id": device_id,
-                                        "user_id": user_id,
-                                        "user_agent": custom_headers['User-Agent'],
-                                        "timestamp": int(time.time()),
-                                        "device_type": "extension",
-                                        "version": "4.26.2",
-                                        "extension_id": "lkbnfiajjmbhnfledhphioinpickokdi"
-                                    }
-                                }
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send AUTH | ID: {auth_response['id']} | version: {auth_response['result']['version']}")
-                                await websocket.send(json.dumps(auth_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success AUTH with Device ID: {device_id}")
-                            elif message.get("action") == "PONG":
-                                pong_response = {"id": message["id"], "origin_action": "PONG"}
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send PONG: {pong_response}")
-                                await websocket.send(json.dumps(pong_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent PONG | ID: {pong_response['id']} | Action: {pong_response['origin_action']}")
-                            elif message.get("action") == "HTTP_REQUEST":
-                                http_request_response = {"id": message["id"], "origin_action": "HTTP_REQUEST"}
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send HTTP_REQUEST: {http_request_response}")
-                                await websocket.send(json.dumps(http_request_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent HTTP_REQUEST | ID: {http_request_response['id']} | Action: {http_request_response['origin_action']}")
-                            elif message.get("action") == "OPEN_TUNNEL":
-                                opentunnel_request_response = {
-                                    "id": message["id"],
-                                    "origin_action": "OPEN_TUNNEL",
-                                    "result": {
-                                        "url": message["url"],
-                                        "status": 200,
-                                        "status_text": "OK",
-                                        "headers": {
-                                            "content-type": "application/json; charset=utf-8",
-                                            "date": custom_date,
-                                            "keep-alive": "timeout=5",
-                                            "proxy-connection": "keep-alive",
-                                            "x-powered-by": "Express",
-                                        }
-                                    }
-                                }
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send OPEN_TUNNEL: {opentunnel_request_response}")
-                                await websocket.send(json.dumps(opentunnel_request_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent OPEN_TUNNEL | ID: {opentunnel_request_response['id']} | Action: {opentunnel_request_response['origin_action']}")
-                    except websockets.exceptions.ConnectionClosedError as e:
-                        logger.error(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Connection closed error | Proxy: {truncate_proxy(protocol_proxy)} | Error: {str(e)[:30]}**")
-                    finally:
-                        await websocket.close()
-                        logger.warning(f"UID: {truncate_userid(user_id)} | Node: {node_type} | WebSocket connection closed | Proxy: {truncate_proxy(protocol_proxy)}")
-                        send_ping_task.cancel()
-                        break
-
-            elif node_type == 'grasslite':
-                async with proxy_connect(
-                    uri,
-                    proxy=proxy,
-                    ssl=ssl_context,
-                    server_hostname=server_hostname,
-                    extra_headers={"Origin": "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg", "User-Agent": custom_headers["User-Agent"]}
-                ) as websocket:
-                    logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success connected to WS with Proxy: {truncate_proxy(protocol_proxy)}")
-
-                    async def send_ping():
-                        while True:
-                            send_message = json.dumps({
-                                "id": str(uuid.uuid4()),
-                                "version": "1.0.0",
-                                "action": "PING",
-                                "data": {}
-                            })
-                            logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send PING | ID: {json.loads(send_message)['id']}")
-                            await websocket.send(send_message)
-                            rand_sleep = random.uniform(10, 30) # random delay + reduce bandwidth usage
-                            logger.info(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent PING | Next in {rand_sleep:.2f} seconds")
-                            await asyncio.sleep(rand_sleep)
-
-                    await asyncio.sleep(1)
-                    send_ping_task = asyncio.create_task(send_ping())
-
-                    try:
-                        while True:
-                            response = await websocket.recv()
-                            message = json.loads(response)
-                            simply_message = {
-                                'id': message.get('id'),
-                                'action': message.get('action')
-                            }
-                            logger.info(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Received message: {simply_message}")
-
-                            custom_date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
-
-                            if message.get("action") == "AUTH":
-                                auth_response = {
-                                    "id": message["id"],
-                                    "origin_action": "AUTH",
-                                    "result": {
-                                        "browser_id": device_id,
-                                        "user_id": user_id,
-                                        "user_agent": custom_headers['User-Agent'],
-                                        "timestamp": int(time.time()),
-                                        "device_type": "extension",
-                                        "version": "4.26.2",
-                                        "extension_id": "ilehaonighjijnmpnagapkhpcdbhclfg"
-                                    }
-                                }
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send AUTH | ID: {auth_response['id']} | version: {auth_response['result']['version']}")
-                                await websocket.send(json.dumps(auth_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success AUTH with Device ID: {device_id}")
-                            elif message.get("action") == "PONG":
-                                pong_response = {"id": message["id"], "origin_action": "PONG"}
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send PONG: {pong_response}")
-                                await websocket.send(json.dumps(pong_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent PONG | ID: {pong_response['id']} | Action: {pong_response['origin_action']}")
-                            elif message.get("action") == "HTTP_REQUEST":
-                                http_request_response = {"id": message["id"], "origin_action": "HTTP_REQUEST"}
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send HTTP_REQUEST: {http_request_response}")
-                                await websocket.send(json.dumps(http_request_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent HTTP_REQUEST | ID: {http_request_response['id']} | Action: {http_request_response['origin_action']}")
-                            elif message.get("action") == "OPEN_TUNNEL":
-                                opentunnel_request_response = {
-                                    "id": message["id"],
-                                    "origin_action": "OPEN_TUNNEL",
-                                    "result": {
-                                        "url": message["url"],
-                                        "status": 200,
-                                        "status_text": "OK",
-                                        "headers": {
-                                            "content-type": "application/json; charset=utf-8",
-                                            "date": custom_date,
-                                            "keep-alive": "timeout=5",
-                                            "proxy-connection": "keep-alive",
-                                            "x-powered-by": "Express",
-                                        }
-                                    }
-                                }
-                                logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send OPEN_TUNNEL: {opentunnel_request_response}")
-                                await websocket.send(json.dumps(opentunnel_request_response))
-                                logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent OPEN_TUNNEL | ID: {opentunnel_request_response['id']} | Action: {opentunnel_request_response['origin_action']}")
-                    except websockets.exceptions.ConnectionClosedError as e:
-                        logger.error(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Connection closed error | Proxy: {truncate_proxy(protocol_proxy)} | Error: {str(e)[:30]}**")
-                    finally:
-                        await websocket.close()
-                        logger.warning(f"UID: {truncate_userid(user_id)} | Node: {node_type} | WebSocket connection closed | Proxy: {truncate_proxy(protocol_proxy)}")
-                        send_ping_task.cancel()
-                        break
+                except websockets.exceptions.ConnectionClosedError as e:
+                    logger.error(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Connection closed error | Proxy: {truncate_proxy(protocol_proxy)} | Error: {str(e)[:30]}**")
+                finally:
+                    await websocket.close()
+                    logger.warning(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | WebSocket connection closed | Proxy: {truncate_proxy(protocol_proxy)}")
+                    send_ping_task.cancel()
+                    break
 
         except Exception as e:
-            logger.error(f"UID: {truncate_userid(user_id)} | Error with proxy {truncate_proxy(protocol_proxy)} ➜ {str(e)[:30]}**")
+            logger.error(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Error with proxy {truncate_proxy(protocol_proxy)} ➜ {str(e)[:30]}**")
             error_conditions = [
                 "Host unreachable",
                 "[SSL: WRONG_VERSION_NUMBER]", 
@@ -406,14 +279,16 @@ async def connect_to_wss(protocol_proxy, user_id):
 
             if remove_on_all_errors:
                 if any(error_msg in str(e) for error_msg in error_conditions):
-                    logger.warning(f"UID: {truncate_userid(user_id)} | Removing error proxy from list ➜ {truncate_proxy(protocol_proxy)}")
+                    logger.warning(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Removing error proxy from list ➜ {truncate_proxy(protocol_proxy)}")
                     remove_proxy_from_list(protocol_proxy)
                     return None
             else:
                 if "Device creation limit exceeded" in str(e):
-                    logger.warning(f"UID: {truncate_userid(user_id)} | Removing error proxy from list ➜ {truncate_proxy(protocol_proxy)}")
+                    logger.warning(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Removing error proxy from list ➜ {truncate_proxy(protocol_proxy)}")
                     remove_proxy_from_list(protocol_proxy)
                     return None
+
+            await asyncio.sleep(5)
             continue
 
 async def main():
@@ -424,7 +299,7 @@ async def main():
         all_proxies = file.read().splitlines()
 
     if len(all_proxies) < ONETIME_PROXY * len(user_ids):
-        raise ValueError("The number of proxies is insufficient to provide 100 proxies per user_id.")
+        raise ValueError(f"UID: {truncate_userid(user_id)} | {node_type} | The number of proxies is insufficient to provide 100 proxies per User ID.")
 
     all_proxies = random.sample(all_proxies, len(user_ids) * ONETIME_PROXY)
     proxy_allocation = {
@@ -433,14 +308,14 @@ async def main():
     }
 
     for user_id, proxies in proxy_allocation.items():
-        logger.warning(f"User ID: {user_id} | Total Proxies: {len(proxies)}")
+        logger.warning(f"UID: {truncate_userid(user_id)} | {node_type} | Total proxies to be used: {len(proxies)}")
         await asyncio.sleep(1)
 
     tasks = {}
 
     for user_id, proxies in proxy_allocation.items():
         for proxy in proxies:
-            await asyncio.sleep(random.uniform(5.0, 1))
+            await asyncio.sleep(random.randint(1, 10) / 10)
             task = asyncio.create_task(connect_to_wss(proxy, user_id))
             tasks[task] = (proxy, user_id)
 
@@ -449,16 +324,16 @@ async def main():
         for task in done:
             if task.result() is None:
                 failed_proxy, user_id = tasks[task]
-                logger.warning(f"UID: {truncate_userid(user_id)} | Removing and replacing failed proxy: {truncate_proxy(failed_proxy)}")
+                logger.warning(f"UID: {truncate_userid(user_id)} | {node_type} | Removing and replacing failed proxy: {truncate_proxy(failed_proxy)}")
 
                 proxy_allocation[user_id].remove(failed_proxy)
                 new_proxy = random.choice(list(set(all_proxies) - set(proxy_allocation[user_id])))
                 proxy_allocation[user_id].append(new_proxy)
 
-                await asyncio.sleep(random.uniform(5.0, 1))
+                await asyncio.sleep(random.randint(1, 10) / 10)
                 new_task = asyncio.create_task(connect_to_wss(new_proxy, user_id))
                 tasks[new_task] = (new_proxy, user_id)
-                logger.success(f"UID: {truncate_userid(user_id)} | Successfully replaced failed proxy: {truncate_proxy(failed_proxy)} with: {truncate_proxy(new_proxy)}")
+                logger.success(f"UID: {truncate_userid(user_id)} | {node_type} | Success replaced failed proxy: {truncate_proxy(failed_proxy)} with: {truncate_proxy(new_proxy)}")
 
             tasks.pop(task)
 

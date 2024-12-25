@@ -1,3 +1,4 @@
+aiohttp
 loguru
 pyfiglet
 websockets==12.0
