@@ -53,6 +53,11 @@ print(f"🌐 Loaded {proxy_count} proxies.")
 print(f"🌐 Active proxy loaded per-task: {ONETIME_PROXY} proxies.")
 print()
 
+print("\033[1;31m🧩 Desktop Node is still under development. Please use Extension/GrassLite instead!\033[0m")
+print("\033[1;31m🧩 Desktop Node is still under development. Please use Extension/GrassLite instead!\033[0m")
+print("\033[1;31m🧩 Desktop Node is still under development. Please use Extension/GrassLite instead!\033[0m \n")
+print("\033[1;32m🧩 Well, you've read it three times. You've been warned.\033[0m \n")
+
 # Get User input for proxy failure handling
 def get_user_input():
     user_input = ""
@@ -69,7 +74,7 @@ print(f"🔵 You selected: {'Yes' if remove_on_all_errors else 'No'}, ENJOY!\n")
 def get_node_type():
     node_type = ""
     while node_type not in ['desktop', 'extension', 'grasslite']:
-        print(f"🧩 Desktop Node (2.0x Reward), Extension (1.25x Reward), GrassLite (1.0x Reward).")
+        print(f"🧩 Desktop Node (2.0x Reward), Extension (1.25x Reward), GrassLite (1.0x Reward)Extension/GrassLite")
         node_type = input("🔵 Choose node type (desktop/extension/grasslite): ").strip().lower()
         if node_type not in ['desktop', 'extension', 'grasslite']:
             print("🔴 Invalid input. Please enter 'desktop' / 'extension' / 'grasslite'.")
@@ -97,10 +102,13 @@ async def connect_to_wss(protocol_proxy, user_id):
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
-            server_hostname = "proxy2.wynd.network"
-            # urilist = ["wss://proxy2.wynd.network:4444/", "wss://proxy2.wynd.network:4650/"]
-            # uri = random.choice(urilist)
-            uri = "wss://proxy2.wynd.network:4650/"
+            # urilist = ["wss://proxy.wynd.network:4444/", "wss://proxy.wynd.network:4650/", "wss://proxy3.wynd.network:4444/", "wss://proxy3.wynd.network:4650/"]
+            urilist = [
+                "wss://proxy2.wynd.network:4444", 
+                "wss://proxy2.wynd.network:4650"
+            ]
+            uri = random.choice(urilist)
+            server_hostname = uri.split("://")[1].split(":")[0]
             proxy = Proxy.from_url(protocol_proxy)
 
             if node_type == 'desktop':
@@ -188,8 +196,8 @@ async def connect_to_wss(protocol_proxy, user_id):
                                 logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send OPEN_TUNNEL: {opentunnel_request_response}")
                                 await websocket.send(json.dumps(opentunnel_request_response))
                                 logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent OPEN_TUNNEL | ID: {opentunnel_request_response['id']} | Action: {opentunnel_request_response['origin_action']}")
-                    except websockets.exceptions.ConnectionClosed as e:
-                        logger.error(f"UID: {truncate_userid(user_id)} | Node: {node_type} | WebSocket closed unexpectedly | Proxy: {truncate_proxy(protocol_proxy)} | Error: {str(e)[:30]}**")
+                    except websockets.exceptions.ConnectionClosedError as e:
+                        logger.error(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Connection closed error | Proxy: {truncate_proxy(protocol_proxy)} | Error: {str(e)[:30]}**")
                     finally:
                         await websocket.close()
                         logger.warning(f"UID: {truncate_userid(user_id)} | Node: {node_type} | WebSocket connection closed | Proxy: {truncate_proxy(protocol_proxy)}")
@@ -282,8 +290,8 @@ async def connect_to_wss(protocol_proxy, user_id):
                                 logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send OPEN_TUNNEL: {opentunnel_request_response}")
                                 await websocket.send(json.dumps(opentunnel_request_response))
                                 logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent OPEN_TUNNEL | ID: {opentunnel_request_response['id']} | Action: {opentunnel_request_response['origin_action']}")
-                    except websockets.exceptions.ConnectionClosed as e:
-                        logger.error(f"UID: {truncate_userid(user_id)} | Node: {node_type} | WebSocket closed unexpectedly | Proxy: {truncate_proxy(protocol_proxy)} | Error: {str(e)[:30]}**")
+                    except websockets.exceptions.ConnectionClosedError as e:
+                        logger.error(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Connection closed error | Proxy: {truncate_proxy(protocol_proxy)} | Error: {str(e)[:30]}**")
                     finally:
                         await websocket.close()
                         logger.warning(f"UID: {truncate_userid(user_id)} | Node: {node_type} | WebSocket connection closed | Proxy: {truncate_proxy(protocol_proxy)}")
@@ -376,8 +384,8 @@ async def connect_to_wss(protocol_proxy, user_id):
                                 logger.debug(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Send OPEN_TUNNEL: {opentunnel_request_response}")
                                 await websocket.send(json.dumps(opentunnel_request_response))
                                 logger.success(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Success sent OPEN_TUNNEL | ID: {opentunnel_request_response['id']} | Action: {opentunnel_request_response['origin_action']}")
-                    except websockets.exceptions.ConnectionClosed as e:
-                        logger.error(f"UID: {truncate_userid(user_id)} | Node: {node_type} | WebSocket closed unexpectedly | Proxy: {truncate_proxy(protocol_proxy)} | Error: {str(e)[:30]}**")
+                    except websockets.exceptions.ConnectionClosedError as e:
+                        logger.error(f"UID: {truncate_userid(user_id)} | Node: {node_type} | Connection closed error | Proxy: {truncate_proxy(protocol_proxy)} | Error: {str(e)[:30]}**")
                     finally:
                         await websocket.close()
                         logger.warning(f"UID: {truncate_userid(user_id)} | Node: {node_type} | WebSocket connection closed | Proxy: {truncate_proxy(protocol_proxy)}")
@@ -415,14 +423,24 @@ async def main():
     with open('proxy.txt', 'r') as file:
         all_proxies = file.read().splitlines()
 
-    used_proxies = min(ONETIME_PROXY, len(all_proxies))
-    active_proxies = random.sample(all_proxies, used_proxies)
+    if len(all_proxies) < ONETIME_PROXY * len(user_ids):
+        raise ValueError("The number of proxies is insufficient to provide 100 proxies per user_id.")
+
+    all_proxies = random.sample(all_proxies, len(user_ids) * ONETIME_PROXY)
+    proxy_allocation = {
+        user_id: all_proxies[i * ONETIME_PROXY: (i + 1) * ONETIME_PROXY]
+        for i, user_id in enumerate(user_ids)
+    }
+
+    for user_id, proxies in proxy_allocation.items():
+        logger.warning(f"User ID: {user_id} | Total Proxies: {len(proxies)}")
+        await asyncio.sleep(1)
 
     tasks = {}
 
-    for user_id in user_ids:
-        for proxy in active_proxies:
-            await asyncio.sleep(random.uniform(2.5, 5.0))
+    for user_id, proxies in proxy_allocation.items():
+        for proxy in proxies:
+            await asyncio.sleep(random.uniform(5.0, 1))
             task = asyncio.create_task(connect_to_wss(proxy, user_id))
             tasks[task] = (proxy, user_id)
 
@@ -433,25 +451,16 @@ async def main():
                 failed_proxy, user_id = tasks[task]
                 logger.warning(f"UID: {truncate_userid(user_id)} | Removing and replacing failed proxy: {truncate_proxy(failed_proxy)}")
 
-                if failed_proxy in active_proxies:
-                    active_proxies.remove(failed_proxy)
+                proxy_allocation[user_id].remove(failed_proxy)
+                new_proxy = random.choice(list(set(all_proxies) - set(proxy_allocation[user_id])))
+                proxy_allocation[user_id].append(new_proxy)
 
-                new_proxy = random.choice(all_proxies)
-                active_proxies.append(new_proxy)
-
-                await asyncio.sleep(random.uniform(2.5, 5.0))
+                await asyncio.sleep(random.uniform(5.0, 1))
                 new_task = asyncio.create_task(connect_to_wss(new_proxy, user_id))
                 tasks[new_task] = (new_proxy, user_id)
                 logger.success(f"UID: {truncate_userid(user_id)} | Successfully replaced failed proxy: {truncate_proxy(failed_proxy)} with: {truncate_proxy(new_proxy)}")
 
             tasks.pop(task)
-
-        for proxy in set(active_proxies) - {task[0] for task in tasks.values()}:
-            for user_id in user_ids:
-                await asyncio.sleep(random.uniform(2.5, 5.0))
-                new_task = asyncio.create_task(connect_to_wss(proxy, user_id))
-                tasks[new_task] = (proxy, user_id)
-                logger.success(f"UID: {truncate_userid(user_id)} | Successfully started task with proxy: {truncate_proxy(proxy)}")
 
 def remove_proxy_from_list(proxy):
     with open("proxy.txt", "r+") as file:
