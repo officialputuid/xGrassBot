@@ -50,7 +50,6 @@ USERAGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.2210.121",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.2210.91"
 ]
-
 HTTP_STATUS_CODES = {
     200: "OK",
     201: "Created",
@@ -162,7 +161,7 @@ async def connect_to_wss(protocol_proxy, user_id):
                 server_hostname=server_hostname,
                 extra_headers=custom_headers
             ) as websocket:
-                logger.success(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Success connect to WS | Headers used: {custom_headers} | Proxy: {truncate_proxy(protocol_proxy)}")
+                logger.success(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Success connect to WS | uri: {uri} | Headers: {custom_headers} | Proxy: {truncate_proxy(protocol_proxy)}")
 
                 async def send_ping():
                     while True:
@@ -177,7 +176,8 @@ async def connect_to_wss(protocol_proxy, user_id):
                             await websocket.send(send_message)
                             logger.info(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Done sent PING | data: {send_message}")
 
-                        rand_sleep = random.uniform(5, 10)
+                        rand_sleep = random.uniform(60, 120)
+                        logger.info(f"UID: {truncate_userid(user_id)} | {truncate_proxy(device_id)} | {node_type} | Next PING in {rand_sleep:.2f} seconds, ENJOY!")
                         await asyncio.sleep(rand_sleep)
 
                 await asyncio.sleep(1)
@@ -206,7 +206,7 @@ async def connect_to_wss(protocol_proxy, user_id):
                                     "user_id": user_id,
                                     "user_agent": random_user_agent,
                                     "timestamp": int(time.time()),
-                                    "device_type": "extension" if node_type == "extension" else "desktop",
+                                    "device_type": "extension" if node_type in ["extension", "grasslite"] else "desktop",
                                     "version": "4.26.2" if node_type == "extension" else "4.30.0"
                                 }
                             }
@@ -299,9 +299,9 @@ async def main():
         all_proxies = file.read().splitlines()
 
     if len(all_proxies) < ONETIME_PROXY * len(user_ids):
-        raise ValueError(f"UID: {truncate_userid(user_id)} | {node_type} | The number of proxies is insufficient to provide 100 proxies per User ID.")
+        raise ValueError(f"The number of proxies is insufficient to provide 100 proxies per User ID.")
 
-    all_proxies = random.sample(all_proxies, len(user_ids) * ONETIME_PROXY)
+    all_proxies = random.sample(all_proxies, ONETIME_PROXY * len(user_ids))
     proxy_allocation = {
         user_id: all_proxies[i * ONETIME_PROXY: (i + 1) * ONETIME_PROXY]
         for i, user_id in enumerate(user_ids)
@@ -315,7 +315,7 @@ async def main():
 
     for user_id, proxies in proxy_allocation.items():
         for proxy in proxies:
-            await asyncio.sleep(random.randint(1, 10) / 10)
+            await asyncio.sleep(random.uniform(2.5, 5.0))
             task = asyncio.create_task(connect_to_wss(proxy, user_id))
             tasks[task] = (proxy, user_id)
 
@@ -327,15 +327,25 @@ async def main():
                 logger.warning(f"UID: {truncate_userid(user_id)} | {node_type} | Removing and replacing failed proxy: {truncate_proxy(failed_proxy)}")
 
                 proxy_allocation[user_id].remove(failed_proxy)
-                new_proxy = random.choice(list(set(all_proxies) - set(proxy_allocation[user_id])))
-                proxy_allocation[user_id].append(new_proxy)
 
-                await asyncio.sleep(random.randint(1, 10) / 10)
-                new_task = asyncio.create_task(connect_to_wss(new_proxy, user_id))
-                tasks[new_task] = (new_proxy, user_id)
-                logger.success(f"UID: {truncate_userid(user_id)} | {node_type} | Success replaced failed proxy: {truncate_proxy(failed_proxy)} with: {truncate_proxy(new_proxy)}")
+                available_proxies = list(set(all_proxies) - set(proxy_allocation[user_id]))
+                if available_proxies:
+                    new_proxy = random.choice(available_proxies)
+                    proxy_allocation[user_id].append(new_proxy)
+
+                    await asyncio.sleep(random.uniform(2.5, 5.0))
+                    new_task = asyncio.create_task(connect_to_wss(new_proxy, user_id))
+                    tasks[new_task] = (new_proxy, user_id)
+                    logger.success(f"UID: {truncate_userid(user_id)} | {node_type} | Success replaced failed proxy: {truncate_proxy(failed_proxy)} with: {truncate_proxy(new_proxy)}")
 
             tasks.pop(task)
+
+        for user_id, proxies in proxy_allocation.items():
+            for proxy in proxies:
+                if proxy not in [task[0] for task in tasks.values()]:
+                    await asyncio.sleep(random.uniform(2.5, 5.0))
+                    new_task = asyncio.create_task(connect_to_wss(proxy, user_id))
+                    tasks[new_task] = (proxy, user_id)
 
 def remove_proxy_from_list(proxy):
     with open("proxy.txt", "r+") as file:
